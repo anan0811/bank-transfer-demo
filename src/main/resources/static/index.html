@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>模擬銀行轉帳</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>模擬銀行轉帳</h1>
+      <p>帳戶查詢 · 轉帳測試 · 交易紀錄</p>
+    </div>
+  </header>
+  <main>
+    <div class="notice">這是本機作品集展示，所有帳戶與金額都是模擬資料，不會進行真實轉帳。</div>
+
+    <section id="loginPanel" class="card login" aria-labelledby="loginTitle">
+      <h2 id="loginTitle">登入示範帳戶</h2>
+      <form id="loginForm">
+        <label for="username">帳戶 ID</label>
+        <input id="username" name="username" type="text" inputmode="numeric" pattern="[0-9]{3}" maxlength="3" required placeholder="例如 001" autocomplete="off">
+        <label for="password">密碼</label>
+        <input id="password" name="password" type="password" required autocomplete="off" placeholder="例如 Emily Chen_123">
+        <button id="loginButton" class="full" type="submit">登入</button>
+      </form>
+      <p id="loginMessage" class="message error" role="alert"></p>
+    </section>
+
+    <section id="dashboard" hidden aria-labelledby="dashboardTitle">
+      <div class="toolbar">
+        <div>
+          <h2 id="dashboardTitle">我的模擬帳戶</h2>
+          <span id="welcome" class="muted"></span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="refreshButton" class="secondary" type="button">重新整理</button>
+          <button id="logoutButton" class="secondary" type="button">登出</button>
+        </div>
+      </div>
+      <div class="grid">
+        <section class="card" aria-labelledby="accountsTitle">
+          <h3 id="accountsTitle">帳戶餘額</h3>
+          <div id="accountList" class="account-list"></div>
+        </section>
+        <section class="card" aria-labelledby="transferTitle">
+          <h3 id="transferTitle">模擬轉帳</h3>
+          <form id="transferForm">
+            <label for="fromAccount">轉出帳戶</label>
+            <select id="fromAccount" required></select>
+            <label for="toAccount">轉入帳戶 ID</label>
+            <input id="toAccount" type="text" inputmode="numeric" pattern="[0-9]{3}" maxlength="3" required placeholder="例如 002">
+            <label for="amount">金額（TWD）</label>
+            <input id="amount" type="text" inputmode="decimal" required placeholder="例如 1200.00">
+            <p class="hint">轉入帳戶 ID 可在專案中的「示範帳戶與登入說明.md」查詢。</p>
+            <button id="transferButton" class="full" type="submit">送出模擬轉帳</button>
+          </form>
+          <p id="transferMessage" class="message" role="status"></p>
+        </section>
+      </div>
+      <section class="card history" aria-labelledby="historyTitle">
+        <h3 id="historyTitle">交易紀錄</h3>
+        <p id="historyCaption" class="muted"></p>
+        <ul id="historyList" class="history-list"></ul>
+      </section>
+    </section>
+
+    <section id="adminPanel" class="admin" hidden aria-labelledby="adminTitle">
+      <div class="toolbar">
+        <div>
+          <h2 id="adminTitle">管理者檢視<span class="admin-badge">唯讀</span></h2>
+          <span id="adminWelcome" class="muted"></span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="adminRefreshButton" class="secondary" type="button">重新整理</button>
+          <button id="adminLogoutButton" class="secondary" type="button">登出</button>
+        </div>
+      </div>
+      <p id="adminMessage" class="message error" role="alert"></p>
+      <div class="stats">
+        <div class="stat"><span>帳戶數</span><strong id="statAccounts">—</strong></div>
+        <div class="stat"><span>全行總餘額</span><strong id="statBalance">—</strong></div>
+        <div class="stat"><span>交易筆數</span><strong id="statTransfers">—</strong></div>
+      </div>
+      <section class="card" aria-labelledby="adminAccountsTitle">
+        <h3 id="adminAccountsTitle">所有帳戶</h3>
+        <label for="adminSearch">搜尋帳戶</label>
+        <input id="adminSearch" type="search" placeholder="輸入 001 或 Emily">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th scope="col">ID</th><th scope="col">姓名</th><th scope="col" class="num">餘額</th></tr></thead>
+            <tbody id="adminAccountsBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" aria-labelledby="adminTransfersTitle">
+        <h3 id="adminTransfersTitle">全部交易紀錄</h3>
+        <p class="muted">依時間由新到舊排列。</p>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th scope="col">編號</th><th scope="col">時間</th><th scope="col">轉出</th><th scope="col">轉入</th><th scope="col" class="num">金額</th></tr></thead>
+            <tbody id="adminTransfersBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const state = { authorization: null, username: null, role: null, accounts: [], directory: [], adminAccounts: [], adminTransfers: [] };
+      const money = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD' });
+      const messages = {
+        INSUFFICIENT_FUNDS: '餘額不足，轉帳未完成。',
+        SAME_ACCOUNT: '轉出與轉入帳戶不能相同。',
+        DUPLICATE_REQUEST: '這筆請求已送出，未再次扣款。',
+        ACCOUNT_NOT_FOUND: '找不到指定帳戶。',
+        NOT_ACCOUNT_OWNER: '只能從自己的帳戶轉出。',
+        INVALID_AMOUNT: '請輸入大於零、最多兩位小數的金額。',
+        INVALID_REQUEST: '請檢查輸入資料。'
+      };
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          ...options,
+          // X-Requested-With stops a failed login from opening the browser's own password dialog.
+          headers: { Authorization: state.authorization, 'X-Requested-With': 'XMLHttpRequest', ...(options.headers || {}) }
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(messages[body.code] || (response.status === 401 ? '帳號或密碼錯誤。' : `請求失敗（${response.status}）。`));
+          error.status = response.status;
+          throw error;
+        }
+        return body;
+      }
+
+      function showMessage(element, text, kind = '') {
+        element.textContent = text;
+        element.className = `message ${kind}`;
+      }
+
+      const idText = (id) => String(id).padStart(3, '0');
+      const directoryName = (id) => state.directory.find((entry) => entry.id === idText(id))?.name || '';
+
+      // Names for account labels only; the directory itself is not shown on the page.
+      async function loadDirectory() {
+        const response = await fetch('/api/demo/accounts', { credentials: 'omit', cache: 'no-store' });
+        if (response.ok) state.directory = await response.json();
+      }
+
+      function renderAccounts() {
+        const list = $('accountList');
+        const select = $('fromAccount');
+        const selected = select.value;
+        list.replaceChildren();
+        select.replaceChildren();
+        for (const account of state.accounts) {
+          const card = document.createElement('div');
+          card.className = 'account';
+          const caption = document.createElement('span');
+          caption.className = 'caption';
+          caption.textContent = `帳戶 #${idText(account.id)} · ${directoryName(account.id)} · ${account.currency}`;
+          const balance = document.createElement('span');
+          balance.className = 'balance';
+          balance.textContent = money.format(account.balance);
+          card.append(caption, balance);
+          list.append(card);
+          const option = document.createElement('option');
+          option.value = account.id;
+          option.textContent = `帳戶 #${idText(account.id)}`;
+          select.append(option);
+        }
+        if (selected && state.accounts.some((a) => String(a.id) === selected)) select.value = selected;
+      }
+
+      async function renderHistory() {
+        const accountId = $('fromAccount').value;
+        $('historyCaption').textContent = accountId ? `帳戶 #${idText(accountId)} 的交易` : '';
+        const list = $('historyList');
+        list.replaceChildren();
+        if (!accountId) return;
+        const records = await api(`/api/accounts/${accountId}/transfers`);
+        if (!records.length) {
+          const empty = document.createElement('li');
+          empty.className = 'muted';
+          empty.textContent = '目前沒有交易紀錄。';
+          list.append(empty);
+          return;
+        }
+        for (const record of records) {
+          const outgoing = String(record.fromAccountId) === accountId;
+          const item = document.createElement('li');
+          const detail = document.createElement('span');
+          detail.textContent = outgoing
+            ? `轉出至帳戶 #${idText(record.toAccountId)} ${directoryName(record.toAccountId)}`
+            : `由帳戶 #${idText(record.fromAccountId)} ${directoryName(record.fromAccountId)} 轉入`;
+          const time = document.createElement('small');
+          time.textContent = new Date(record.createdAt).toLocaleString('zh-TW');
+          detail.append(time);
+          const amount = document.createElement('strong');
+          amount.className = outgoing ? 'outgoing' : 'incoming';
+          amount.textContent = `${outgoing ? '−' : '+'}${money.format(record.amount)}`;
+          item.append(detail, amount);
+          list.append(item);
+        }
+      }
+
+      async function refresh() {
+        state.accounts = await api('/api/accounts');
+        renderAccounts();
+        await renderHistory();
+      }
+
+      const ownerLabel = (accountId) => {
+        const account = state.adminAccounts.find((a) => a.id === accountId);
+        return `#${idText(accountId)} ${account ? account.ownerName : ''}`;
+      };
+
+      function tableRow(values, numericLast = false) {
+        const row = document.createElement('tr');
+        values.forEach((value, index) => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          if (numericLast && index === values.length - 1) cell.className = 'num';
+          row.append(cell);
+        });
+        return row;
+      }
+
+      function renderAdminAccounts() {
+        const search = $('adminSearch').value.trim().toLowerCase();
+        const body = $('adminAccountsBody');
+        body.replaceChildren();
+        state.adminAccounts
+          .filter((a) => a.ownerId.includes(search) || a.ownerName.toLowerCase().includes(search))
+          .forEach((a) => body.append(tableRow([a.ownerId, a.ownerName, money.format(a.balance)], true)));
+      }
+
+      function renderAdminTransfers() {
+        const body = $('adminTransfersBody');
+        body.replaceChildren();
+        if (!state.adminTransfers.length) {
+          body.append(tableRow(['—', '目前沒有交易紀錄', '', '', '']));
+          return;
+        }
+        for (const t of state.adminTransfers) {
+          body.append(tableRow([`#${t.id}`, new Date(t.createdAt).toLocaleString('zh-TW'),
+            ownerLabel(t.fromAccountId), ownerLabel(t.toAccountId), money.format(t.amount)], true));
+        }
+      }
+
+      async function refreshAdmin() {
+        const [accounts, transfers] = await Promise.all([api('/api/admin/accounts'), api('/api/admin/transfers')]);
+        state.adminAccounts = accounts;
+        state.adminTransfers = transfers;
+        // Sum in cents to avoid floating-point drift.
+        const cents = accounts.reduce((sum, a) => sum + Math.round(Number(a.balance) * 100), 0);
+        $('statAccounts').textContent = accounts.length;
+        $('statBalance').textContent = money.format(cents / 100);
+        $('statTransfers').textContent = transfers.length;
+        renderAdminAccounts();
+        renderAdminTransfers();
+      }
+
+      $('loginForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = $('loginButton');
+        button.disabled = true;
+        showMessage($('loginMessage'), '');
+        state.username = $('username').value.trim();
+        const credentials = new TextEncoder().encode(`${state.username}:${$('password').value}`);
+        state.authorization = `Basic ${btoa(String.fromCharCode(...credentials))}`;
+        try {
+          const me = await api('/api/me');
+          state.role = me.role;
+          if (me.role === 'ADMIN') {
+            await refreshAdmin();
+            $('adminWelcome').textContent = `已登入：${me.name}（ID ${me.id}）`;
+            $('adminPanel').hidden = false;
+          } else {
+            if (!state.directory.length) await loadDirectory().catch(() => {}); // Names are optional here.
+            await refresh();
+            $('welcome').textContent = `已登入：${me.name}（ID ${me.id}）`;
+            $('dashboard').hidden = false;
+          }
+          $('password').value = '';
+          $('loginPanel').hidden = true;
+        } catch (error) {
+          state.authorization = null;
+          state.username = null;
+          state.role = null;
+          showMessage($('loginMessage'), error.message, 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      function logout() {
+        state.authorization = null;
+        state.username = null;
+        state.role = null;
+        state.accounts = [];
+        state.adminAccounts = [];
+        state.adminTransfers = [];
+        $('accountList').replaceChildren();
+        $('historyList').replaceChildren();
+        $('adminAccountsBody').replaceChildren();
+        $('adminTransfersBody').replaceChildren();
+        $('dashboard').hidden = true;
+        $('adminPanel').hidden = true;
+        $('loginPanel').hidden = false;
+        showMessage($('transferMessage'), '');
+        showMessage($('adminMessage'), '', 'error');
+      }
+      $('logoutButton').addEventListener('click', logout);
+      $('adminLogoutButton').addEventListener('click', logout);
+      $('adminRefreshButton').addEventListener('click', async () => {
+        showMessage($('adminMessage'), '', 'error');
+        try { await refreshAdmin(); }
+        catch (error) { showMessage($('adminMessage'), error.message, 'error'); }
+      });
+      $('adminSearch').addEventListener('input', renderAdminAccounts);
+
+      $('refreshButton').addEventListener('click', async () => {
+        try { await refresh(); }
+        catch (error) { showMessage($('transferMessage'), error.message, 'error'); }
+      });
+      $('fromAccount').addEventListener('change', async () => {
+        try { await renderHistory(); }
+        catch (error) { showMessage($('transferMessage'), error.message, 'error'); }
+      });
+
+      $('transferForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = $('transferButton');
+        const amount = $('amount').value.trim();
+        if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+          showMessage($('transferMessage'), messages.INVALID_AMOUNT, 'error');
+          return;
+        }
+        button.disabled = true;
+        showMessage($('transferMessage'), '');
+        try {
+          const result = await api('/api/transfers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fromAccountId: Number($('fromAccount').value),
+              toAccountId: Number($('toAccount').value),
+              amount,
+              requestId: crypto.randomUUID()
+            })
+          });
+          $('amount').value = '';
+          showMessage($('transferMessage'), `轉帳成功：${money.format(result.amount)}，交易編號 #${result.id}。`, 'success');
+          await refresh();
+        } catch (error) {
+          showMessage($('transferMessage'), error.message, 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      loadDirectory().catch(() => {});
+    })();
+  </script>
+</body>
+</html>

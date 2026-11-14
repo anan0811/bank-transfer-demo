@@ -1,0 +1,9 @@
+/target/
+/bankdemo.mv.db
+/bankdemo.trace.db
+/backup/
+/build-check.log
+/server.log
+/server-error.log
+/.idea/
+*.iml

@@ -1,0 +1,61 @@
+:root { color-scheme: light; font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f3f6f7; color: #193039; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; background: #123e47; color: white; padding: 24px max(24px, calc((100vw - 1050px) / 2)); }
+header h1 { margin: 0 0 4px; font-size: clamp(24px, 4vw, 34px); }
+header p { margin: 0; color: #d4e5e5; font-size: 14px; }
+main { max-width: 1050px; margin: 28px auto; padding: 0 20px 48px; }
+.notice { border-left: 4px solid #2e9c82; background: #e7f6f1; color: #245547; padding: 13px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 22px; }
+.card { background: white; border: 1px solid #dce6e8; box-shadow: 0 8px 25px #1839430b; border-radius: 16px; padding: 24px; }
+.card + .card { margin-top: 18px; }
+.login { max-width: 430px; margin: 0 auto; }
+h2 { font-size: 21px; margin: 0 0 8px; }
+h3 { font-size: 17px; margin: 0 0 14px; }
+.muted { color: #60757b; font-size: 14px; line-height: 1.6; }
+label { display: block; font-size: 14px; font-weight: 700; margin: 17px 0 7px; }
+input, select { width: 100%; border: 1px solid #bdcdd1; border-radius: 9px; padding: 11px 12px; background: white; color: #193039; font: inherit; }
+input:focus, select:focus { outline: 2px solid #53ae9b; outline-offset: 1px; }
+button { border: 0; border-radius: 9px; padding: 11px 16px; background: #176c62; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+button:hover { background: #12584f; }
+button:disabled { opacity: .55; cursor: wait; }
+button.secondary { background: #e9f1f1; color: #24565b; }
+button.secondary:hover { background: #d8e8e8; }
+a { color: #176c62; }
+.full { width: 100%; margin-top: 20px; }
+.hint { font-size: 13px; color: #688087; margin: 12px 0 0; }
+.message { min-height: 22px; margin: 12px 0 0; font-size: 14px; }
+.message.error { color: #a52b32; }
+.message.success { color: #176c62; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+.toolbar h2 { margin: 0; }
+.toolbar-actions { display: flex; gap: 9px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.account-list { display: grid; gap: 12px; margin-top: 16px; }
+.account { border: 1px solid #cfe1df; background: #f5fbf9; border-radius: 12px; padding: 17px; }
+.account .balance { display: block; margin-top: 8px; font-size: 26px; font-weight: 750; color: #155b54; }
+.account .caption { color: #60757b; font-size: 13px; }
+.history { margin-top: 18px; }
+.history-list { list-style: none; padding: 0; margin: 4px 0 0; }
+.history-list li { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #e4ecee; padding: 14px 0; }
+.history-list small { display: block; color: #688087; margin-top: 4px; }
+.history-list strong { white-space: nowrap; }
+.outgoing { color: #a34138; }
+.incoming { color: #176c62; }
+.table-scroll { max-height: 420px; overflow: auto; margin-top: 14px; border: 1px solid #e0e8e9; border-radius: 9px; }
+.data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+.data-table th, .data-table td { padding: 10px 12px; border-bottom: 1px solid #e8eeee; }
+.data-table th { position: sticky; top: 0; background: #edf5f3; }
+.data-table td { overflow-wrap: anywhere; }
+.data-table .num { text-align: right; white-space: nowrap; }
+.admin .card { margin-top: 18px; }
+.admin-badge { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: #fdf0d9; color: #7a4a06; font-size: 13px; font-weight: 700; vertical-align: middle; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.stat { border: 1px solid #cfe1df; background: #f5fbf9; border-radius: 12px; padding: 16px; }
+.stat span { color: #60757b; font-size: 13px; }
+.stat strong { display: block; margin-top: 6px; font-size: 24px; color: #155b54; }
+[hidden] { display: none !important; }
+@media (max-width: 700px) {
+  .grid, .stats { grid-template-columns: 1fr; }
+  .toolbar { align-items: flex-start; flex-direction: column; }
+  .card { padding: 20px; }
+}
