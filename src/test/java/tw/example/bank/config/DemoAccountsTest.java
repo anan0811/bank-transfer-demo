@@ -3,7 +3,14 @@ package tw.example.bank.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,20 +48,45 @@ class DemoAccountsTest {
     }
 
     @Test
+    void namesAreFixedSoEveryCloneGetsTheSameLogins() {
+        var names = users.findByRoleOrderByLoginIdAsc(DemoUser.ROLE_USER).stream()
+                .map(DemoUser::getDisplayName).toList();
+        assertThat(names).isEqualTo(DemoNames.CUSTOMERS);
+        assertThat(names.get(0)).isEqualTo("Brian Kuo");
+        assertThat(names.get(99)).isEqualTo("Annie Huang");
+    }
+
+    @Test
+    void credentialsDocumentMatchesFixedNames() throws Exception {
+        // "示範帳戶與登入說明.md" must list exactly the names the application creates.
+        String doc = Files.readString(Path.of("示範帳戶與登入說明.md"), StandardCharsets.UTF_8);
+        Matcher row = Pattern.compile("(?m)^\\| (\\d{3}) \\| ([^|]+?) \\| `([^`]+)` \\|$").matcher(doc);
+        List<String> documented = new ArrayList<>();
+        while (row.find()) {
+            assertThat(row.group(1)).isEqualTo(String.format("%03d", documented.size() + 1));
+            assertThat(row.group(3)).isEqualTo(row.group(2) + "_123");
+            documented.add(row.group(2));
+        }
+        assertThat(documented).isEqualTo(DemoNames.CUSTOMERS);
+        assertThat(doc).contains("admin_000");
+    }
+
+    @Test
     @Transactional // Rolled back so the renamed data does not leak into other tests.
-    void oldChineseNamesAreReplacedWithEnglishNamesWithoutTouchingBalances() {
+    void outdatedNamesAreResetToFixedNamesWithoutTouchingBalances() {
         DemoUser first = users.findById("001").orElseThrow();
         first.rename("王子晴", passwords.encode("王子晴_123"));
+        String secondHashBefore = users.findById("002").orElseThrow().getPasswordHash();
         BigDecimal totalBefore = totalBalance();
 
         initializer.initialize();
 
-        var all = users.findByRoleOrderByLoginIdAsc(DemoUser.ROLE_USER);
-        assertThat(all).hasSize(100).allSatisfy(user ->
-                assertThat(DemoDataInitializer.isEnglishName(user.getDisplayName())).isTrue());
         DemoUser renamed = users.findById("001").orElseThrow();
-        assertThat(passwords.matches(renamed.getDisplayName() + "_123", renamed.getPasswordHash())).isTrue();
+        assertThat(renamed.getDisplayName()).isEqualTo("Brian Kuo");
+        assertThat(passwords.matches("Brian Kuo_123", renamed.getPasswordHash())).isTrue();
         assertThat(passwords.matches("王子晴_123", renamed.getPasswordHash())).isFalse();
+        // Customers that already match keep their password hash untouched.
+        assertThat(users.findById("002").orElseThrow().getPasswordHash()).isEqualTo(secondHashBefore);
         assertThat(totalBalance()).isEqualByComparingTo(totalBefore);
         assertThat(users.findById("000").orElseThrow().getDisplayName()).isEqualTo("admin");
     }

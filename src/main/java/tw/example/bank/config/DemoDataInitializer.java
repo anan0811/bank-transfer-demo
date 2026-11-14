@@ -2,15 +2,8 @@ package tw.example.bank.config;
 
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
-import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,16 +20,6 @@ public class DemoDataInitializer {
     static final String ADMIN_NAME = "admin";
     static final String ADMIN_PASSWORD = "admin_000"; // Public local-demo credential, like the customer ones.
 
-    // Common Taiwanese surnames in romanized form, paired with English given names, e.g. "Emily Chen".
-    private static final String[] SURNAMES = {
-            "Chen", "Lin", "Huang", "Chang", "Lee", "Wang", "Wu", "Liu", "Tsai", "Yang",
-            "Hsu", "Cheng", "Hsieh", "Kuo", "Hung", "Tseng", "Chiu", "Liao", "Lai", "Chou"
-    };
-    private static final String[] GIVEN_NAMES = {
-            "Emily", "Grace", "Kevin", "Jason", "Amy", "Eric", "Vivian", "Brian", "Joyce", "Ryan",
-            "Cindy", "Daniel", "Irene", "Leo", "Sophia", "Andy", "Tina", "Jerry", "Annie", "Henry",
-            "Iris", "Alex", "Wendy", "Ethan", "Peggy", "Steven", "Claire", "Ivan", "Sharon", "Oscar"
-    };
     private static final Pattern ENGLISH_NAME = Pattern.compile("[A-Za-z]+( [A-Za-z]+)*");
 
     private final AccountRepository accounts;
@@ -56,26 +39,28 @@ public class DemoDataInitializer {
     public void initialize() {
         users.assignDefaultRole();
         seedCustomers();
-        renameNonEnglishCustomers();
+        syncCustomerNames();
         ensureAdmin();
-    }
-
-    /**
-     * Older databases were seeded with Chinese names. Give every customer a new English name and
-     * matching password ("name_123"); IDs, balances and transfer history stay unchanged.
-     */
-    private void renameNonEnglishCustomers() {
-        List<DemoUser> customers = users.findByRoleOrderByLoginIdAsc(DemoUser.ROLE_USER);
-        if (customers.stream().allMatch(user -> isEnglishName(user.getDisplayName()))) return;
-        List<String> names = generateNames();
-        for (int i = 0; i < customers.size(); i++) {
-            String name = names.get(i);
-            customers.get(i).rename(name, passwordEncoder.encode(name + "_123"));
-        }
     }
 
     public static boolean isEnglishName(String name) {
         return ENGLISH_NAME.matcher(name).matches();
+    }
+
+    /**
+     * Older databases may hold Chinese or randomly generated names. Align every customer with
+     * {@link DemoNames} and reset that customer's password to "name_123"; IDs, balances and
+     * transfer history stay unchanged. Customers whose name already matches are left alone.
+     */
+    private void syncCustomerNames() {
+        List<DemoUser> customers = users.findByRoleOrderByLoginIdAsc(DemoUser.ROLE_USER);
+        for (int i = 0; i < customers.size(); i++) {
+            String expected = DemoNames.CUSTOMERS.get(i);
+            DemoUser customer = customers.get(i);
+            if (!expected.equals(customer.getDisplayName())) {
+                customer.rename(expected, passwordEncoder.encode(expected + "_123"));
+            }
+        }
     }
 
     /** The administrator only reviews data: it owns no bank account and cannot transfer money. */
@@ -98,7 +83,6 @@ public class DemoDataInitializer {
 
         List<Account> existing = accounts.findAll(Sort.by("id"));
         if (existing.size() > 100) throw new IllegalStateException("More than 100 accounts already exist.");
-        List<String> names = generateNames();
         for (int number = 1; number <= 100; number++) {
             String loginId = String.format(Locale.ROOT, "%03d", number);
             if (number <= existing.size()) {
@@ -116,31 +100,8 @@ public class DemoDataInitializer {
                         .setParameter("balance", new BigDecimal("10000.00"))
                         .executeUpdate();
             }
-            String name = names.get(number - 1);
+            String name = DemoNames.CUSTOMERS.get(number - 1);
             users.save(new DemoUser(loginId, name, passwordEncoder.encode(name + "_123"), DemoUser.ROLE_USER));
         }
-    }
-
-    private List<String> generateNames() {
-        SecureRandom random = new SecureRandom();
-        List<String> uniqueNames = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        while (uniqueNames.size() < 70) {
-            String name = GIVEN_NAMES[random.nextInt(GIVEN_NAMES.length)]
-                    + " " + SURNAMES[random.nextInt(SURNAMES.length)];
-            if (seen.add(name)) uniqueNames.add(name);
-        }
-        List<String> names = new ArrayList<>(uniqueNames);
-        Map<String, Integer> counts = new HashMap<>();
-        uniqueNames.forEach(name -> counts.put(name, 1));
-        while (names.size() < 100) {
-            String name = uniqueNames.get(random.nextInt(uniqueNames.size()));
-            if (counts.get(name) < 3) {
-                names.add(name);
-                counts.put(name, counts.get(name) + 1);
-            }
-        }
-        Collections.shuffle(names, random);
-        return names;
     }
 }
